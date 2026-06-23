@@ -26,17 +26,12 @@ jobs:
           echo "TOKEN=$TOKEN"
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
-      - name: Send Issue Data to API
+      - name: Send Labels to API
         run: |
-          curl -X POST "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/${{ github.event.issue.number }}/labels" \
+          curl -X PATCH "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/${{ github.event.issue.number }}/labels" \
             -H "accept: application/json" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
             -d '{
-              "id": ${{ github.event.issue.id }},
-              "labels": [],
-              "number": ${{ github.event.issue.number }},
-              "state": "${{ github.event.issue.state }}",
-              "title": "${{ github.event.issue.title }}",
-              "url": "${{ github.event.issue.html_url }}"
+              "labels": ["Bug"]
             }'
