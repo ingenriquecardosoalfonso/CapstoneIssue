@@ -1,6 +1,6 @@
 name: Notify API on Issue Created
 
-'on':
+on:
   issues:
     types:
       - opened
@@ -10,25 +10,100 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get JWT Token
+      - name: Debug GitHub Event
+        run: |
+          echo "===== ISSUE INFORMATION ====="
+          echo "Issue Number: ${{ github.event.issue.number }}"
+          echo "Issue ID: ${{ github.event.issue.id }}"
+          echo "Issue Title: ${{ github.event.issue.title }}"
+          echo "Issue State: ${{ github.event.issue.state }}"
+          echo "Issue URL: ${{ github.event.issue.html_url }}"
+          echo ""
+          echo "===== FULL EVENT ====="
+          echo '${{ toJson(github.event) }}'
+
+      - name: Authenticate against API
         id: auth
         run: |
-          TOKEN=$(curl -s -X POST "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/auth/login" \
+          echo "===== LOGIN REQUEST ====="
+          echo "Username: ${{ secrets.API_USERNAME }}"
+
+          LOGIN_RESPONSE=$(curl -s \
+            -X POST \
+            "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/auth/login" \
             -H "accept: application/json" \
             -H "Content-Type: application/json" \
             -d '{
               "username":"'"${{ secrets.API_USERNAME }}"'",
               "password":"'"${{ secrets.API_PASSWORD }}"'"
-            }' | jq -r '.access_token')
+            }')
+
+          echo "===== LOGIN RESPONSE ====="
+          echo "$LOGIN_RESPONSE"
+
+          TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.access_token')
+
+          echo ""
+          echo "===== TOKEN VALIDATION ====="
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "ERROR: Could not obtain JWT token"
+            exit 1
+          fi
+
+          echo "Token length: ${#TOKEN}"
+          echo "Token obtained successfully"
 
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
-      - name: Send Labels to API
+      - name: Update Labels in API
         run: |
-          curl -X PATCH "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/${{ github.event.issue.number }}/labels" \
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+
+          echo ""
+          echo "===== PATCH REQUEST ====="
+          echo "Ticket Number: $ISSUE_NUMBER"
+
+          RESPONSE=$(curl -s \
+            -w "\nHTTP_STATUS:%{http_code}" \
+            -X PATCH \
+            "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/$ISSUE_NUMBER/labels" \
             -H "accept: application/json" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
             -d '{
               "labels": ["Bug"]
-            }'
+            }')
+
+          echo ""
+          echo "===== PATCH RESPONSE ====="
+          echo "$RESPONSE"
+
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+
+          echo ""
+          echo "===== STATUS CODE ====="
+          echo "$HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "ERROR: API returned HTTP $HTTP_STATUS"
+            exit 1
+          fi
+
+          echo "PATCH completed successfully"
+
+      - name: Verify Ticket Exists
+        run: |
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+
+          echo ""
+          echo "===== VERIFYING TICKET ====="
+
+          VERIFY_RESPONSE=$(curl -s \
+            -w "\nHTTP_STATUS:%{http_code}" \
+            -X GET \
+            "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/$ISSUE_NUMBER" \
+            -H "accept: application/json" \
+            -H "Authorization: Bearer ${{ steps.auth.outputs.token }}")
+
+          echo "$VERIFY_RESPONSE"
