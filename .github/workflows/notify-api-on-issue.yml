@@ -1,6 +1,6 @@
 name: Notify API on Issue Created
 
-on:
+'on':
   issues:
     types:
       - opened
@@ -23,16 +23,9 @@ jobs:
 
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
-      - name: Verify Token
-        run: |
-          if [ -z "${{ steps.auth.outputs.token }}" ]; then
-            echo "ERROR: Token not generated"
-            exit 1
-          fi
-
       - name: Send Labels to API
         run: |
-          curl -v -X PATCH "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/${{ github.event.issue.number }}/labels" \
+          curl -X PATCH "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/${{ github.event.issue.number }}/labels" \
             -H "accept: application/json" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
