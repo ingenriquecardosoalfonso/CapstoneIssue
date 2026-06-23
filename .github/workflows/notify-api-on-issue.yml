@@ -6,8 +6,36 @@ on:
       - opened
 
 jobs:
-  test:
+  notify-api:
     runs-on: ubuntu-latest
 
     steps:
-      - run: echo "Issue #${{ github.event.issue.number }} created"
+      - name: Get JWT Token
+        id: auth
+        run: |
+          TOKEN=$(curl -s -X POST "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/auth/login" \
+            -H "accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "username":"'"${{ secrets.API_USERNAME }}"'",
+              "password":"'"${{ secrets.API_PASSWORD }}"'"
+            }' | jq -r '.access_token')
+
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Verify Token
+        run: |
+          if [ -z "${{ steps.auth.outputs.token }}" ]; then
+            echo "ERROR: Token not generated"
+            exit 1
+          fi
+
+      - name: Send Labels to API
+        run: |
+          curl -v -X PATCH "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/${{ github.event.issue.number }}/labels" \
+            -H "accept: application/json" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
+            -d '{
+              "labels": ["Bug"]
+            }'
