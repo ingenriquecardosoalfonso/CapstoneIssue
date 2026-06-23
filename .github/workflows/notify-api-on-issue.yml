@@ -1,5 +1,3 @@
-# .github/workflows/notify-api-on-issue.yml
-
 name: Notify API on Issue Created
 
 on:
@@ -23,12 +21,18 @@ jobs:
               "password":"'"${{ secrets.API_PASSWORD }}"'"
             }' | jq -r '.access_token')
 
-          echo "TOKEN=$TOKEN"
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Verify Token
+        run: |
+          if [ -z "${{ steps.auth.outputs.token }}" ]; then
+            echo "ERROR: Token not generated"
+            exit 1
+          fi
 
       - name: Send Labels to API
         run: |
-          curl -X PATCH "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/${{ github.event.issue.number }}/labels" \
+          curl -v -X PATCH "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/${{ github.event.issue.number }}/labels" \
             -H "accept: application/json" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
