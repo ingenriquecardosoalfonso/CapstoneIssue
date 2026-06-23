@@ -1,33 +1,42 @@
 # .github/workflows/notify-api-on-issue.yml
+
 name: Notify API on Issue Created
 
 on:
   issues:
-    types: [opened]
+    types:
+      - opened
 
 jobs:
   notify-api:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Get Auth Token
+      - name: Get JWT Token
         id: auth
         run: |
-          TOKEN=$(curl -s -X POST https://tu-api.com/auth/login \
+          TOKEN=$(curl -s -X POST "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/auth/login" \
+            -H "accept: application/json" \
             -H "Content-Type: application/json" \
             -d '{
-              "username": "${{ secrets.API_USERNAME }}",
-              "password": "${{ secrets.API_PASSWORD }}"
+              "username":"'"${{ secrets.API_USERNAME }}"'",
+              "password":"'"${{ secrets.API_PASSWORD }}"'"
             }' | jq -r '.access_token')
+
+          echo "TOKEN=$TOKEN"
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
-      - name: Notify API with Issue Number
+      - name: Send Issue Data to API
         run: |
-          curl -X POST https://tu-api.com/endpoint \
+          curl -X POST "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/${{ github.event.issue.number }}/labels" \
+            -H "accept: application/json" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
             -d '{
-              "issue_number": ${{ github.event.issue.number }},
+              "id": ${{ github.event.issue.id }},
+              "labels": [],
+              "number": ${{ github.event.issue.number }},
+              "state": "${{ github.event.issue.state }}",
               "title": "${{ github.event.issue.title }}",
-              "url": "${{ github.event.issue.html_url }}",
-              "repo": "${{ github.repository }}"
+              "url": "${{ github.event.issue.html_url }}"
             }'
