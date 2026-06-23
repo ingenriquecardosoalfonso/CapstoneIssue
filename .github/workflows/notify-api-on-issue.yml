@@ -1,0 +1,33 @@
+# .github/workflows/notify-api-on-issue.yml
+name: Notify API on Issue Created
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  notify-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Auth Token
+        id: auth
+        run: |
+          TOKEN=$(curl -s -X POST https://tu-api.com/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{
+              "username": "${{ secrets.API_USERNAME }}",
+              "password": "${{ secrets.API_PASSWORD }}"
+            }' | jq -r '.access_token')
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Notify API with Issue Number
+        run: |
+          curl -X POST https://tu-api.com/endpoint \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
+            -d '{
+              "issue_number": ${{ github.event.issue.number }},
+              "title": "${{ github.event.issue.title }}",
+              "url": "${{ github.event.issue.html_url }}",
+              "repo": "${{ github.repository }}"
+            }'
