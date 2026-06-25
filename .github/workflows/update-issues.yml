@@ -92,7 +92,7 @@ jobs:
 
             PATCH_RESPONSE=$(curl -s \
               -X PATCH \
-              "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/$TICKET_ID/labels" \
+              "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/$TICKET_NUMBER/labels" \
               -H "accept: application/json" \
               -H "Authorization: Bearer $TOKEN" \
               -H "Content-Type: application/json" \
