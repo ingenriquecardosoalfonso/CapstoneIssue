@@ -1,0 +1,113 @@
+name: Auto-Label Unlabeled Tickets
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Runs daily at 10:56 AM MDT (Calgary summer time, UTC-6) = 16:56 UTC
+    - cron: '00 17 * * *'
+
+jobs:
+  label-tickets:
+    name: Fetch and Label Unlabeled Tickets
+    runs-on: ubuntu-latest
+
+    steps:
+      # ---------------------------------------------------------------
+      # Step 1: Authenticate against the API and retrieve a JWT token
+      # ---------------------------------------------------------------
+      - name: Authenticate against API
+        id: auth
+        run: |
+          echo "===== LOGIN REQUEST ====="
+          echo "Username: ${{ secrets.API_USERNAME }}"
+          LOGIN_RESPONSE=$(curl -s \
+            -X POST \
+            "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/auth/login" \
+            -H "accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "username":"'"${{ secrets.API_USERNAME }}"'",
+              "password":"'"${{ secrets.API_PASSWORD }}"'"
+            }')
+          echo "===== LOGIN RESPONSE ====="
+          echo "$LOGIN_RESPONSE"
+
+          TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.access_token')
+
+          echo ""
+          echo "===== TOKEN VALIDATION ====="
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "ERROR: Could not obtain JWT token"
+            exit 1
+          fi
+          echo "Token length: ${#TOKEN}"
+          echo "Token obtained successfully"
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      # ---------------------------------------------------------------
+      # Step 2: Fetch all tickets that have no labels assigned
+      # ---------------------------------------------------------------
+      - name: Fetch unlabeled tickets
+        id: unlabeled
+        run: |
+          echo "===== FETCHING UNLABELED TICKETS ====="
+          RESPONSE=$(curl -s \
+            -X GET \
+            "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/unlabeled" \
+            -H "accept: application/json" \
+            -H "Authorization: Bearer ${{ steps.auth.outputs.token }}")
+
+          echo "===== UNLABELED TICKETS RESPONSE ====="
+          echo "$RESPONSE"
+
+          TOTAL=$(echo "$RESPONSE" | jq -r '.total')
+          echo "Total unlabeled tickets found: $TOTAL"
+
+          if [ "$TOTAL" = "0" ] || [ "$TOTAL" = "null" ]; then
+            echo "No unlabeled tickets to process. Skipping label step."
+            echo "tickets=[]" >> $GITHUB_OUTPUT
+          else
+            # Serialize the tickets array as a single-line JSON string for the next step
+            TICKETS=$(echo "$RESPONSE" | jq -c '.tickets')
+            echo "tickets=$TICKETS" >> $GITHUB_OUTPUT
+          fi
+
+      # ---------------------------------------------------------------
+      # Step 3: Iterate over each unlabeled ticket and assign "Critical"
+      # ---------------------------------------------------------------
+      - name: Apply Critical label to unlabeled tickets
+        if: steps.unlabeled.outputs.tickets != '[]'
+        run: |
+          TOKEN="${{ steps.auth.outputs.token }}"
+          TICKETS='${{ steps.unlabeled.outputs.tickets }}'
+
+          echo "===== STARTING LABEL PATCHING ====="
+          echo "$TICKETS" | jq -c '.[]' | while read -r TICKET; do
+            TICKET_ID=$(echo "$TICKET" | jq -r '.id')
+            TICKET_NUMBER=$(echo "$TICKET" | jq -r '.number')
+            TICKET_TITLE=$(echo "$TICKET" | jq -r '.title')
+
+            echo ""
+            echo "----- Processing ticket #$TICKET_NUMBER: \"$TICKET_TITLE\" (id: $TICKET_ID) -----"
+
+            PATCH_RESPONSE=$(curl -s \
+              -X PATCH \
+              "https://avaapi-fch5a5ayf5c5dta4.canadacentral-01.azurewebsites.net/api/v1/data/tickets/$TICKET_ID/labels" \
+              -H "accept: application/json" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"labels": ["Critical"]}')
+
+            echo "PATCH response:"
+            echo "$PATCH_RESPONSE"
+
+            # Validate that the response contains the expected label
+            LABEL_NAME=$(echo "$PATCH_RESPONSE" | jq -r '.labels[0].name // empty')
+            if [ -z "$LABEL_NAME" ]; then
+              echo "WARNING: Label may not have been applied correctly for ticket #$TICKET_NUMBER"
+            else
+              echo "SUCCESS: Label \"$LABEL_NAME\" applied to ticket #$TICKET_NUMBER"
+            fi
+          done
+          echo ""
+          echo "===== LABEL PATCHING COMPLETE ====="
