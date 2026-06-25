@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   schedule:
     # Runs daily at 10:56 AM MDT (Calgary summer time, UTC-6) = 16:56 UTC
-    - cron: '00 17 * * *'
+    - cron: '25 17 * * *'
 
 jobs:
   label-tickets:
